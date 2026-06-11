@@ -1,10 +1,8 @@
+
 import 'dart:convert';
 
-import 'services/agentservice.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
-final agentService = AgentService();
 
 enum TableStatus { idle, loading, ready, error }
 
@@ -17,10 +15,6 @@ class DataService {
     'dataObjects': <dynamic>[],
     'itemType': ItemType.none,
   });
-
-  void carregar(int index) {
-    carregarAgents();
-  }
 
   void carregarAgents() {
     if (tableStateNotifier.value['status'] == TableStatus.loading) return;
@@ -43,18 +37,12 @@ class DataService {
         'status': TableStatus.ready,
         'dataObjects': agents,
         'itemType': ItemType.agent,
-        'propertyNames': [
-          "displayName",
-          "description",
-        ],
-        'columnNames': [
-          "Nome",
-          "Descrição",
-        ],
       };
     }).catchError((_) {
       tableStateNotifier.value = {
         'status': TableStatus.error,
+        'dataObjects': [],
+        'itemType': ItemType.none,
       };
     });
   }
@@ -66,8 +54,19 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    dataService.carregarAgents();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,118 +82,229 @@ class MyApp extends StatelessWidget {
           surface: Color(0xFF1A2634),
         ),
       ),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text("AgentTracker"),
-        ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFF0F1923),
-                Color(0xFF1A2634),
-                Color(0xFF10263D),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: ValueListenableBuilder(
-            valueListenable: dataService.tableStateNotifier,
-            builder: (_, value, __) {
-              switch (value['status']) {
-                case TableStatus.idle:
-                  return const Center(
-                    child: Text(
-                      "Clique para carregar os agentes",
-                      style: TextStyle(color: Colors.white70, fontSize: 18),
-                    ),
-                  );
+      home: const HomePage(),
+    );
+  }
+}
 
-                case TableStatus.loading:
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
 
-                case TableStatus.ready:
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      child: DataTableWidget(
-                        jsonObjects: value['dataObjects'],
-                        propertyNames:
-                            List<String>.from(value['propertyNames']),
-                        columnNames:
-                            List<String>.from(value['columnNames']),
-                      ),
-                    ),
-                  );
-
-                case TableStatus.error:
-                  return const Center(
-                    child: Text(
-                      "Erro ao carregar agentes",
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  );
-              }
-              return const SizedBox();
-            },
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("AgentTracker"),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF0F1923),
+              Color(0xFF1A2634),
+              Color(0xFF10263D),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => dataService.carregar(0),
-          backgroundColor: const Color(0xFFFF4655),
-          child: const Icon(Icons.download),
+        child: ValueListenableBuilder(
+          valueListenable: dataService.tableStateNotifier,
+          builder: (_, value, __) {
+            switch (value['status']) {
+              case TableStatus.idle:
+              case TableStatus.loading:
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
+
+              case TableStatus.ready:
+                return AgentListWidget(
+                  agents: value['dataObjects'],
+                );
+
+              case TableStatus.error:
+                return const Center(
+                  child: Text(
+                    "Erro ao carregar agentes",
+                    style: TextStyle(color: Colors.red),
+                  ),
+                );
+
+              default:
+                return const SizedBox();
+            }
+          },
         ),
       ),
     );
   }
 }
 
-class DataTableWidget extends StatelessWidget {
-  final List jsonObjects;
-  final List<String> columnNames;
-  final List<String> propertyNames;
+class AgentListWidget extends StatefulWidget {
+  final List agents;
 
-  const DataTableWidget({
+  const AgentListWidget({
     super.key,
-    this.jsonObjects = const [],
-    this.columnNames = const [],
-    this.propertyNames = const [],
+    required this.agents,
+  });
+
+  @override
+  State<AgentListWidget> createState() => _AgentListWidgetState();
+}
+
+class _AgentListWidgetState extends State<AgentListWidget> {
+  String search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredAgents = widget.agents.where((agent) {
+      final name = agent['displayName']
+          .toString()
+          .toLowerCase();
+
+      return name.contains(search.toLowerCase());
+    }).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: "Pesquisar agente...",
+              hintStyle: const TextStyle(
+                color: Colors.white54,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                color: Colors.white,
+              ),
+              filled: true,
+              fillColor: const Color(0xFF1A2634),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onChanged: (value) {
+              setState(() {
+                search = value;
+              });
+            },
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: filteredAgents.length,
+            itemBuilder: (context, index) {
+              final agent = filteredAgents[index];
+
+              return Card(
+                color: const Color(0xFF1A2634),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                child: ListTile(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AgentDetailsPage(agent: agent),
+                      ),
+                    );
+                  },
+                  leading: agent['displayIcon'] != null
+                      ? CircleAvatar(
+                          backgroundImage: NetworkImage(
+                            agent['displayIcon'],
+                          ),
+                        )
+                      : null,
+                  title: Text(
+                    agent['displayName'],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    agent['description'],
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    color: Colors.white54,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class AgentDetailsPage extends StatelessWidget {
+  final Map<String, dynamic> agent;
+
+  const AgentDetailsPage({
+    super.key,
+    required this.agent,
   });
 
   @override
   Widget build(BuildContext context) {
-    return DataTable(
-      headingRowColor: WidgetStateProperty.all(
-        const Color(0xFF1A2634),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(agent['displayName']),
       ),
-      columns: columnNames
-          .map(
-            (name) => DataColumn(
-              label: Text(
-                name,
-                style: const TextStyle(
-                  color: Color(0xFFFF4655),
-                  fontWeight: FontWeight.bold,
-                ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            if (agent['fullPortrait'] != null)
+              Image.network(
+                agent['fullPortrait'],
+                height: 350,
+              )
+            else if (agent['displayIcon'] != null)
+              Image.network(
+                agent['displayIcon'],
+                height: 200,
+              ),
+
+            const SizedBox(height: 20),
+
+            Text(
+              agent['displayName'],
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          )
-          .toList(),
-      rows: jsonObjects.map<DataRow>((obj) {
-        return DataRow(
-          cells: propertyNames.map<DataCell>((prop) {
-            return DataCell(
-              Text(
-                "${obj[prop] ?? ''}",
-                style: const TextStyle(color: Colors.white),
+
+            const SizedBox(height: 20),
+
+            Text(
+              agent['description'],
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.white70,
               ),
-            );
-          }).toList(),
-        );
-      }).toList(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
+
